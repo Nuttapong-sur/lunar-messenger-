@@ -3,7 +3,7 @@ import requests
 import json
 import base64
 import re
-import os  # [ใหม่] เรียกใช้ระบบจัดการไฟล์หลังบ้านเพื่อเซฟข้อมูลลงดิสก์คลาวด์
+import os
 
 # ตั้งค่าหน้าเว็บให้เป็นแบบกว้าง
 st.set_page_config(page_title="AI Roleplay Messenger", layout="wide")
@@ -134,12 +134,11 @@ def parse_bot_reply(raw_text):
     return thought, reply
 
 # =================================================================
-# [ใหม่] ระบบบันทึกและโหลดไฟล์ถาวรเพื่อซิงค์ข้อมูลและป้องกัน F5
+# ระบบบันทึกและโหลดไฟล์ถาวรเพื่อซิงค์ข้อมูลและป้องกัน F5
 # =================================================================
 DB_FILE = "chat_history.json"
 
 def save_data_permanently():
-    """ฟังก์ชันเซฟแชตและไดอารี่ลงไฟล์ถาวรบนคลาวด์"""
     data = {
         "messages": st.session_state.messages,
         "summary": st.session_state.summary
@@ -148,7 +147,6 @@ def save_data_permanently():
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 def load_data_permanently():
-    """ฟังก์ชันดึงแชตเก่าขึ้นมาแสดงผลเมื่อมีการรีเฟรชหน้าเว็บ"""
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, "r", encoding="utf-8") as f:
@@ -167,7 +165,15 @@ def load_data_permanently():
 # =================================================================
 st.sidebar.title("⚙️ การตั้งค่าระบบบอท")
 
-api_key = st.sidebar.text_input("1. ใส่ OpenRouter API Key", type="password")
+# 🔒 [ใหม่!] ระบบแอบดึง API Key อัตโนมัติจากเซฟลับคลาวด์ ถ้าเจอจะเอามาใส่ให้เลยทันที
+default_api_key = ""
+try:
+    if "OPENROUTER_API_KEY" in st.secrets:
+        default_api_key = st.secrets["OPENROUTER_API_KEY"]
+except:
+    pass
+
+api_key = st.sidebar.text_input("1. ใส่ OpenRouter API Key", value=default_api_key, type="password")
 model_name = st.sidebar.text_input("2. ชื่อโมเดล AI", value="deepseek/deepseek-chat")
 bg_file = st.sidebar.file_uploader("3. อัปโหลดรูปภาพพื้นหลัง (ลากไฟล์วาง)", type=["png", "jpg", "jpeg"])
 
@@ -190,7 +196,6 @@ selected_style = st.sidebar.selectbox(
     index=3
 )
 
-# ระบบ Popover ยืนยันการ Reset แบบล้างไฟล์เกลี้ยงหมดจดจริง ๆ
 st.sidebar.markdown(" ")
 with st.sidebar.popover("🧹 ล้างประวัติการแชท (Reset)", use_container_width=True):
     st.warning("⚠️ แน่ใจใช่ไหมคะ? ประวัติแชตทั้งหมดและไดอารี่ความจำของลูนาร์จะถูกลบถาวรทันที ไม่สามารถกู้คืนได้!")
@@ -198,11 +203,10 @@ with st.sidebar.popover("🧹 ล้างประวัติการแช�
         st.session_state.messages = []
         st.session_state.summary = ""
         if os.path.exists(DB_FILE):
-            os.remove(DB_FILE) # ลบไฟล์ถาวรทิ้งเพื่อเริ่มนับหนึ่งใหม่ชาร์จแบตบอท
+            os.remove(DB_FILE)
         st.rerun()
 
 st.sidebar.markdown("---")
-# เรียกฟังก์ชันโหลดข้อมูลเก่าจากไฟล์ขึ้นมาสแตนด์บายใน RAM ทันทีที่แอปโดนรีเฟรช
 if "messages" not in st.session_state:
     load_data_permanently()
 
@@ -274,7 +278,7 @@ def auto_summarize_chat():
         fresh_summary = call_openrouter(summary_prompt)
         if "⚠️" not in fresh_summary:
             st.session_state.summary = fresh_summary
-            save_data_permanently() # เซฟไดอารี่ตัวใหม่ลงไฟล์ถาวร
+            save_data_permanently()
 
 # =================================================================
 # 4. หน้าต่างแชทหลัก (Messenger Interface)
@@ -304,7 +308,7 @@ if user_input := st.chat_input("พิมพ์บทสนทนาของค
     st.markdown('<div class="msg-row bot-row"><div class="bubble bot-bubble" style="opacity: 0.5; font-style: italic; background-color: rgba(255,255,255,0.6);">🔮 ลูนาร์กำลังเรียบเรียงคำพูดและคิดในใจ...</div></div>', unsafe_allow_html=True)
 
     st.session_state.messages.append({"role": "user", "content": user_input})
-    save_data_permanently() # เซฟคำพูดของเราลงไฟล์ทันที
+    save_data_permanently()
     auto_summarize_chat()
 
     thought_instruction = (
@@ -339,6 +343,6 @@ if user_input := st.chat_input("พิมพ์บทสนทนาของค
         "content": reply_content,
         "thought": thought_content
     })
-    save_data_permanently() # เซฟคำตอบบอทลงไฟล์ถาวรปิดท้ายงานรอบนั้น
+    save_data_permanently()
     
     st.rerun()
