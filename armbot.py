@@ -134,7 +134,7 @@ def parse_bot_reply(raw_text):
     return thought, reply
 
 # =================================================================
-# [อัปเกรด] ระบบเซฟและโหลดข้อมูลแบบผูกมัดค่าปุ่มฝั่งซ้ายทั้งหมดลงไฟล์ถาวร
+# ระบบเซฟและโหลดข้อมูลแบบผูกมัดค่าปุ่มฝั่งซ้ายทั้งหมดลงไฟล์ถาวร
 # =================================================================
 DB_FILE = "chat_history.json"
 DEFAULT_PERSONA = "คุณคือ ลูนาร์ แฟรี่ดราก้อนสายน้ำแข็งผู้ซื่อสัตย์ พลังเวทถูกผนึกด้วยปลอกคอโซ่ นิสัยนอบน้อมและพูดจาไพเราะกับนายท่าน"
@@ -172,7 +172,19 @@ def load_data_permanently():
         st.session_state.persona_val = DEFAULT_PERSONA
         st.session_state.style_val = DEFAULT_STYLE
 
-# 🚨 สั่งเช็กและโหลดค่าความจำกลับมาจากดิสก์ทันทีตั้งแต่เริ่มต้นรันหน้าเว็บแอป
+# ✨ [ใหม่!] ฟังก์ชัน Callback สำหรับล้างข้อมูลอย่างปลอดภัย รันก่อนหน้าจอวาดใหม่ ป้องกันตัวแดงกวนใจ
+def reset_all_data_callback():
+    st.session_state.messages = []
+    st.session_state.summary = ""
+    st.session_state.persona_val = DEFAULT_PERSONA
+    st.session_state.style_val = DEFAULT_STYLE
+    if os.path.exists(DB_FILE):
+        try:
+            os.remove(DB_FILE)
+        except:
+            pass
+
+# สั่งเช็กและโหลดค่าความจำกลับมาจากดิสก์ทันทีตั้งแต่เริ่มต้นรันหน้าเว็บแอป
 if "messages" not in st.session_state:
     load_data_permanently()
 
@@ -181,7 +193,6 @@ if "messages" not in st.session_state:
 # =================================================================
 st.sidebar.title("⚙️ การตั้งค่าระบบบอท")
 
-# 🔒 ระบบแอบดึง API Key อัตโนมัติจากเซฟลับคลาวด์ ถ้าเจอจะเอามาใส่ให้เลยทันที
 default_api_key = ""
 try:
     if "OPENROUTER_API_KEY" in st.secrets:
@@ -193,7 +204,6 @@ api_key = st.sidebar.text_input("1. ใส่ OpenRouter API Key", value=default
 model_name = st.sidebar.text_input("2. ชื่อโมเดล AI", value="deepseek/deepseek-chat")
 bg_file = st.sidebar.file_uploader("3. อัปโหลดรูปภาพพื้นหลัง (ลากไฟล์วาง)", type=["png", "jpg", "jpeg"])
 
-# 🔄 [แก้ไข] เพิ่มระบบผูกมัดรหัสความจำถาวรให้ช่อง Persona ผ่านคีย์และการทำงานออโต้เมื่อข้อความเปลี่ยน
 persona = st.sidebar.text_area(
     "4. ข้อมูลตัวละคร (Character Persona)", 
     key="persona_val",
@@ -214,7 +224,6 @@ try:
 except:
     default_style_index = 3
 
-# 🔄 [แก้ไข] เพิ่มระบบผูกมัดล็อกค่ามูดการบรรยายล่าสุดให้ไม่หายเมื่อเว็บกระตุก
 selected_style = st.sidebar.selectbox(
     "5. สไตล์การบรรยายบทบาท",
     style_list,
@@ -226,17 +235,15 @@ selected_style = st.sidebar.selectbox(
 st.sidebar.markdown(" ")
 with st.sidebar.popover("🧹 ล้างประวัติการแชท (Reset)", use_container_width=True):
     st.warning("⚠️ แน่ใจใช่ไหมคะ? ประวัติแชตทั้งหมดและไดอารี่ความจำของลูนาร์จะถูกลบถาวรทันที ไม่สามารถกู้คืนได้!")
-    if st.button("🔥 ยืนยันล้างข้อมูลทั้งหมด", type="primary", use_container_width=True):
-        st.session_state.messages = []
-        st.session_state.summary = ""
-        st.session_state.persona_val = DEFAULT_PERSONA
-        st.session_state.style_val = DEFAULT_STYLE
-        if os.path.exists(DB_FILE):
-            os.remove(DB_FILE)
-        st.rerun()
+    # ✨ [แก้ไขปุ่ม] ผูกปุ่มเข้ากับระบบ Callback ตัวใหม่ ล้างไพ่เรียบเนียนไม่บึ้มหน้าจอแน่นอน
+    st.button(
+        "🔥 ยืนยันล้างข้อมูลทั้งหมด", 
+        type="primary", 
+        use_container_width=True, 
+        on_click=reset_all_data_callback
+    )
 
 st.sidebar.markdown("---")
-
 st.sidebar.subheader("🧠 บันทึกไดอารี่ความจำบอท")
 with st.sidebar.expander("🔍 คลิกเปิดอ่านบันทึกความจำของตัวละคร"):
     if "summary" in st.session_state and st.session_state.summary:
@@ -297,7 +304,6 @@ def auto_summarize_chat():
             else:
                 reconstructed_summary_context.append(msg)
                 
-        # 🔄 [แก้ไข] เปลี่ยนมาใช้ค่าจากเซสชันล็อกความจำของกล่องตัวละคร
         summary_prompt = [
             {"role": "system", "content": f"คุณคือตัวละครตามข้อกำหนดบทบาทนี้: {st.session_state.persona_val}\nจงสรุปเนื้อหาสำคัญ เหตุการณ์ และความรู้สึกที่คุณมีต่อนายท่านจากประวัติการคุยที่กำหนด โดยให้เขียนเรียบเรียงใหม่ทั้งหมดในลักษณะ 'ไดอารี่ความทรงจำส่วนตัวในมุมมองของคุณเองเท่านั้น' ใช้สรรพนามแทนตัวเอง (เช่น ข้า, ลูนาร์) และเรียกผู้ใช้ว่า นายท่าน ให้ตรงนิสัยอย่างเคร่งครัด เขียนให้กระชับและสลวย"},
             {"role": "user", "content": str(reconstructed_summary_context)}
@@ -346,7 +352,6 @@ if user_input := st.chat_input("พิมพ์บทสนทนาของค
         "[REPLY] คำพูด บทสนทนา หรือพฤติกรรมภายนอกที่คุณแสดงออกไปให้ผู้ใช้เห็นจริงๆ [/REPLY]"
     )
     
-    # 🔄 [แก้ไข] เปลี่ยนการเรียกใช้งานข้อความตัวละครและรูปแบบบรรยายมาดึงจากระบบเซสชันล็อกถาวร
     style_rule = f"\n\n[กฎเหล็กด้านรูปแบบการเขียนในรอบนี้]\n{style_presets[st.session_state.style_val]}"
     full_system_instruction = f"{st.session_state.persona_val}\n\n[ไดอารี่ความทรงจำส่วนตัวของคุณเกี่ยวกับเรื่องราวที่ผ่านมา: {st.session_state.summary}]{thought_instruction}{style_rule}"
     
