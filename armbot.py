@@ -3,6 +3,7 @@ import requests
 import json
 import base64
 import re
+import os  # [ใหม่] เรียกใช้ระบบจัดการไฟล์หลังบ้านเพื่อเซฟข้อมูลลงดิสก์คลาวด์
 
 # ตั้งค่าหน้าเว็บให้เป็นแบบกว้าง
 st.set_page_config(page_title="AI Roleplay Messenger", layout="wide")
@@ -133,6 +134,35 @@ def parse_bot_reply(raw_text):
     return thought, reply
 
 # =================================================================
+# [ใหม่] ระบบบันทึกและโหลดไฟล์ถาวรเพื่อซิงค์ข้อมูลและป้องกัน F5
+# =================================================================
+DB_FILE = "chat_history.json"
+
+def save_data_permanently():
+    """ฟังก์ชันเซฟแชตและไดอารี่ลงไฟล์ถาวรบนคลาวด์"""
+    data = {
+        "messages": st.session_state.messages,
+        "summary": st.session_state.summary
+    }
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+def load_data_permanently():
+    """ฟังก์ชันดึงแชตเก่าขึ้นมาแสดงผลเมื่อมีการรีเฟรชหน้าเว็บ"""
+    if os.path.exists(DB_FILE):
+        try:
+            with open(DB_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                st.session_state.messages = data.get("messages", [])
+                st.session_state.summary = data.get("summary", "")
+        except:
+            st.session_state.messages = []
+            st.session_state.summary = ""
+    else:
+        st.session_state.messages = []
+        st.session_state.summary = ""
+
+# =================================================================
 # 1. แถบควบคุมด้านข้าง (Sidebar) สำหรับตั้งค่าบอท
 # =================================================================
 st.sidebar.title("⚙️ การตั้งค่าระบบบอท")
@@ -160,16 +190,22 @@ selected_style = st.sidebar.selectbox(
     index=3
 )
 
-# [ฟีเจอร์เดิม] ระบบ Popover ยืนยันการ Reset เพื่อป้องกันมือลั่น
+# ระบบ Popover ยืนยันการ Reset แบบล้างไฟล์เกลี้ยงหมดจดจริง ๆ
 st.sidebar.markdown(" ")
 with st.sidebar.popover("🧹 ล้างประวัติการแชท (Reset)", use_container_width=True):
     st.warning("⚠️ แน่ใจใช่ไหมคะ? ประวัติแชตทั้งหมดและไดอารี่ความจำของลูนาร์จะถูกลบถาวรทันที ไม่สามารถกู้คืนได้!")
     if st.button("🔥 ยืนยันล้างข้อมูลทั้งหมด", type="primary", use_container_width=True):
         st.session_state.messages = []
         st.session_state.summary = ""
+        if os.path.exists(DB_FILE):
+            os.remove(DB_FILE) # ลบไฟล์ถาวรทิ้งเพื่อเริ่มนับหนึ่งใหม่ชาร์จแบตบอท
         st.rerun()
 
 st.sidebar.markdown("---")
+# เรียกฟังก์ชันโหลดข้อมูลเก่าจากไฟล์ขึ้นมาสแตนด์บายใน RAM ทันทีที่แอปโดนรีเฟรช
+if "messages" not in st.session_state:
+    load_data_permanently()
+
 st.sidebar.subheader("🧠 บันทึกไดอารี่ความจำบอท")
 with st.sidebar.expander("🔍 คลิกเปิดอ่านบันทึกความจำของตัวละคร"):
     if "summary" in st.session_state and st.session_state.summary:
@@ -183,28 +219,11 @@ with st.sidebar.expander("🔍 คลิกเปิดอ่านบันท�
 if bg_file is not None:
     file_bytes = bg_file.read()
     base64_image = base64.b64encode(file_bytes).decode()
-    
-    # 💥 [จุดแก้ไขสำคัญ!] ปรับแก้ CSS ของภาพพื้นหลัง
-    # วิธีที่ 1: background-size: contain; (แนะนำ) แสดงภาพทั้งภาพโดยไม่ตัด
     bg_css_contain = f"""
     <style>
     .stApp {{
         background-image: url("data:image/jpeg;base64,{base64_image}");
-        background-size: contain; /* [แก้ไข!] ปรับขนาดภาพให้แสดงได้ทั้งภาพ */
-        background-repeat: no-repeat; /* ป้องกันภาพแสดงซ้ำแบบกระเบื้อง */
-        background-position: center; /* จัดภาพไว้ตรงกลางหน้าจอ */
-        background-attachment: fixed;
-        background-color: #262730; /* เติมสีพื้นหลังเข้มในพื้นที่ว่าง */
-    }}
-    </style>
-    """
-    
-    # วิธีที่ 2: ใช้เปอร์เซ็นต์ (เช่น กว้าง 50%) กำหนดขนาดภาพให้เล็กลงแน่นอน (ลองสลับใช้แทน contain ได้)
-    bg_css_percent = f"""
-    <style>
-    .stApp {{
-        background-image: url("data:image/jpeg;base64,{base64_image}");
-        background-size: 50% auto; /* [แก้ไข!] กำหนดขนาดภาพให้กว้าง 50% ของหน้าจอ */
+        background-size: contain;
         background-repeat: no-repeat;
         background-position: center;
         background-attachment: fixed;
@@ -212,18 +231,11 @@ if bg_file is not None:
     }}
     </style>
     """
-    
-    # [สลับวิธีที่นี่] ตอนนี้ใช้ วิธีที่ 1 (contain) อยู่ครับ
     st.markdown(bg_css_contain, unsafe_allow_html=True)
 
 # =================================================================
-# 3. เตรียมระบบหน่วยความจำ (Session State)
+# 3. เตรียมระบบเรียกใช้ OpenRouter API
 # =================================================================
-if "messages" not in st.session_state:
-    st.session_state.messages = []  
-if "summary" not in st.session_state:
-    st.session_state.summary = ""   
-
 def call_openrouter(messages_payload):
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -262,6 +274,7 @@ def auto_summarize_chat():
         fresh_summary = call_openrouter(summary_prompt)
         if "⚠️" not in fresh_summary:
             st.session_state.summary = fresh_summary
+            save_data_permanently() # เซฟไดอารี่ตัวใหม่ลงไฟล์ถาวร
 
 # =================================================================
 # 4. หน้าต่างแชทหลัก (Messenger Interface)
@@ -291,6 +304,7 @@ if user_input := st.chat_input("พิมพ์บทสนทนาของค
     st.markdown('<div class="msg-row bot-row"><div class="bubble bot-bubble" style="opacity: 0.5; font-style: italic; background-color: rgba(255,255,255,0.6);">🔮 ลูนาร์กำลังเรียบเรียงคำพูดและคิดในใจ...</div></div>', unsafe_allow_html=True)
 
     st.session_state.messages.append({"role": "user", "content": user_input})
+    save_data_permanently() # เซฟคำพูดของเราลงไฟล์ทันที
     auto_summarize_chat()
 
     thought_instruction = (
@@ -301,7 +315,6 @@ if user_input := st.chat_input("พิมพ์บทสนทนาของค
     )
     
     style_rule = f"\n\n[กฎเหล็กด้านรูปแบบการเขียนในรอบนี้]\n{style_presets[selected_style]}"
-    
     full_system_instruction = f"{persona}\n\n[ไดอารี่ความทรงจำส่วนตัวของคุณเกี่ยวกับเรื่องราวที่ผ่านมา: {st.session_state.summary}]{thought_instruction}{style_rule}"
     
     recent_context = st.session_state.messages[-8:]
@@ -326,5 +339,6 @@ if user_input := st.chat_input("พิมพ์บทสนทนาของค
         "content": reply_content,
         "thought": thought_content
     })
+    save_data_permanently() # เซฟคำตอบบอทลงไฟล์ถาวรปิดท้ายงานรอบนั้น
     
     st.rerun()
