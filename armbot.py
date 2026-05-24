@@ -141,7 +141,6 @@ DEFAULT_PERSONA = "คุณคือ ลูนาร์ แฟรี่ดร�
 DEFAULT_STYLE = "ยาวขึ้น 【ยาว / ฉลาดที่สุด】"
 
 def save_data_permanently():
-    """ฟังก์ชันเซฟข้อมูลทุกอย่างหน้าเว็บลงไฟล์ JSON ล็อกสถานะถาวร"""
     data = {
         "messages": st.session_state.get("messages", []),
         "summary": st.session_state.get("summary", ""),
@@ -152,7 +151,6 @@ def save_data_permanently():
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 def load_data_permanently():
-    """ฟังก์ชันดึงค่าข้อมูลตัวละครและสไตล์ล่าสุดกลับมาเรนเดอร์ใหม่หลังโดน F5"""
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, "r", encoding="utf-8") as f:
@@ -172,7 +170,6 @@ def load_data_permanently():
         st.session_state.persona_val = DEFAULT_PERSONA
         st.session_state.style_val = DEFAULT_STYLE
 
-# ✨ [ใหม่!] ฟังก์ชัน Callback สำหรับล้างข้อมูลอย่างปลอดภัย รันก่อนหน้าจอวาดใหม่ ป้องกันตัวแดงกวนใจ
 def reset_all_data_callback():
     st.session_state.messages = []
     st.session_state.summary = ""
@@ -184,7 +181,6 @@ def reset_all_data_callback():
         except:
             pass
 
-# สั่งเช็กและโหลดค่าความจำกลับมาจากดิสก์ทันทีตั้งแต่เริ่มต้นรันหน้าเว็บแอป
 if "messages" not in st.session_state:
     load_data_permanently()
 
@@ -235,7 +231,6 @@ selected_style = st.sidebar.selectbox(
 st.sidebar.markdown(" ")
 with st.sidebar.popover("🧹 ล้างประวัติการแชท (Reset)", use_container_width=True):
     st.warning("⚠️ แน่ใจใช่ไหมคะ? ประวัติแชตทั้งหมดและไดอารี่ความจำของลูนาร์จะถูกลบถาวรทันที ไม่สามารถกู้คืนได้!")
-    # ✨ [แก้ไขปุ่ม] ผูกปุ่มเข้ากับระบบ Callback ตัวใหม่ ล้างไพ่เรียบเนียนไม่บึ้มหน้าจอแน่นอน
     st.button(
         "🔥 ยืนยันล้างข้อมูลทั้งหมด", 
         type="primary", 
@@ -331,6 +326,58 @@ for msg in st.session_state.messages:
         st.markdown(f'<div class="msg-row bot-row"><div class="bubble bot-bubble">{msg["content"]}</div>{thought_html}</div>', unsafe_allow_html=True)
 
 st.markdown('</div>', unsafe_allow_html=True)
+
+# ⏭️ [อัปเดตใหม่!] ปุ่มสลับดำเนินพล็อต (จะปรากฏเมื่อข้อความล่าสุดเป็นของ AI)
+if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant":
+    if st.button("⏭️ ดำเนินเรื่องต่อ (คลิกเพื่อให้ลูนาร์ส่งบทสนทนาถัดไป)", use_container_width=True):
+        if not api_key:
+            st.error("กรุณากรอก OpenRouter API Key ก่อนนะครับ!")
+            st.stop()
+            
+        thought_instruction = (
+            "\n\n[กฎเหล็กเรื่องความคิดในใจ]\n"
+            "ทุกครั้งที่คุณตอบกลับผู้ใช้ คุณจะต้องแบ่งโครงสร้างข้อความออกเป็น 2 ส่วนอย่างเคร่งครัดโดยใช้แท็กครอบดังนี้:\n"
+            "[THOUGHT] เขียนความคิดในใจ ความรู้สึกที่แท้จริง แผนการ หรือสิ่งที่คุณคิดแต่ไม่กล้าพูดออกไปหาผู้ใช้โดยตรงในสถานการณ์นี้ [/THOUGHT]\n"
+            "[REPLY] คำพูด บทสนทนา หรือพฤติกรรมภายนอกที่คุณแสดงออกไปให้ผู้ใช้เห็นจริงๆ [/REPLY]"
+        )
+        style_rule = f"\n\n[กฎเหล็กด้านรูปแบบการเขียนในรอบนี้]\n{style_presets[st.session_state.style_val]}"
+        
+        # 🔑 สัญญาณลับสั่งให้ดำเนินเรื่องไปข้างหน้าต่อทันที สร้างเป็นเทิร์นใหม่
+        advance_prompt = (
+            "\n\n[คำสั่งพิเศษ: ดำเนินเนื้อเรื่องถัดไป]\n"
+            "นายท่านยังไม่ได้พิมพ์ตอบกลับ จงดำเนินพล็อตไปข้างหน้าต่อ บรรยายการกระทำ ท่าทาง สภาพแวดล้อมรอบตัวที่เปลี่ยนไป "
+            "หรือพูดประโยคถัดไปเพื่อดึงดูดใจให้นายท่านกลับมาตอบโต้ตอบกับคุณอีกรอบ"
+        )
+        
+        full_system_instruction = f"{st.session_state.persona_val}\n\n[ไดอารี่ความทรงจำส่วนตัวของคุณเกี่ยวกับเรื่องราวที่ผ่านมา: {st.session_state.summary}]{thought_instruction}{style_rule}{advance_prompt}"
+        
+        recent_context = st.session_state.messages[-8:]
+        reconstructed_context = []
+        for msg in recent_context:
+            if msg["role"] == "assistant" and msg.get("thought"):
+                full_content = f"[THOUGHT]\n{msg['thought']}\n[/THOUGHT]\n[REPLY]\n{msg['content']}\n[/REPLY]"
+                reconstructed_context.append({"role": "assistant", "content": full_content})
+            else:
+                reconstructed_context.append(msg)
+                
+        # ส่ง Payloads เพื่อกระตุ้นให้บอทสวมบทบาทเทิร์นใหม่
+        api_messages = [{"role": "system", "content": full_system_instruction}] + reconstructed_context + [{"role": "user", "content": "(นายท่านยังเงียบอยู่ จงดำเนินเหตุการณ์ถัดไป)"}]
+        
+        with st.spinner("🔮 ลูนาร์กำลังพิจารณาสถานการณ์และดำเนินบทต่อไป..."):
+            bot_raw_reply = call_openrouter(api_messages)
+            
+        new_thought, new_reply = parse_bot_reply(bot_raw_reply)
+        
+        # ✨ [เปลี่ยนพฤติกรรมปุ่ม] สร้างเป็นกล่องข้อความอันใหม่ (บับเบิ้ลใหม่) แยกต่างหากตามที่คุณต้องการ
+        st.session_state.messages.append({
+            "role": "assistant", 
+            "content": new_reply,
+            "thought": new_thought
+        })
+            
+        save_data_permanently()
+        auto_summarize_chat()
+        st.rerun()
 
 # ช่องรับข้อความจากผู้ใช้
 if user_input := st.chat_input("พิมพ์บทสนทนาของคุณที่นี่..."):
